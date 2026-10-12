@@ -1,0 +1,185 @@
+using Azure.Identity;
+using Microsoft.Identity.Web;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Identity.Web.TokenCacheProviders.InMemory;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using SampleAuthApi.Extensions;
+using SampleAuthApi.Options;
+
+
+var builder = WebApplication.CreateBuilder(args);
+
+
+//This is for the redirect microsoft login
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // Container Apps sits behind Envoy with dynamic internal IPs,
+    // so we must clear the known proxy/network allow-lists.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+// ---------------------------------------------------------
+// 1KeyVaultUri loaded from the Container App Secret
+// ---------------------------------------------------------
+                                         
+var keyVaultUri = builder.Configuration["keyvaulturi"];
+
+if (string.IsNullOrWhiteSpace(keyVaultUri))
+{
+    throw new InvalidOperationException("KeyVaultUri configuration value is missing.");
+}
+// ---------------------------------------------------------
+// Key Vault integrate
+// ---------------------------------------------------
+builder.Configuration.AddAzureKeyVault(
+    new Uri(keyVaultUri),
+    new DefaultAzureCredential());    
+
+builder.Services.AddHttpContextAccessor();
+
+//Swagger
+builder.Services.AddSwaggerDocumentation();
+
+// Controllers
+builder.Services.AddControllers();
+
+// ---------------------------------------------------------
+// ServiceTokenOptions load (Tokens from the Key Vault)
+// ---------------------------------------------------------
+builder.Services.Configure<ServiceTokenOptions>(options =>
+{
+    var token1 = builder.Configuration["sampleapiplatform-token-client1"];
+
+    if (string.IsNullOrWhiteSpace(token1))
+    {
+        throw new InvalidOperationException("Token 'sampleapiplatform-token-client1' is missing from Key Vault.");
+    }
+
+    options.ValidTokens.Add(token1);
+});
+
+// ---------------------------------------------------------
+// Token-Middleware registrieren
+// ---------------------------------------------------------
+builder.Services.AddSingleton<TokenValidationMiddleware>();
+
+// ⭐ Register Authentication + JWT Bearer
+
+// Authorization
+builder.Services.AddControllersWithViews();
+    
+var clientId = builder.Configuration["AzureAd:ClientId"];
+var appIdUri = builder.Configuration["AzureAd:Audience"];
+
+// ---------------------------------------------------------
+// 1) OIDC = Browser-Login (Redirect, Cookie-Session)
+// ---------------------------------------------------------
+
+var clientSecret = builder.Configuration["AzureAdClientSecret1"];
+
+
+if (string.IsNullOrWhiteSpace(clientSecret))
+{
+    throw new InvalidOperationException("ClientSecret not found in Key Vault.");
+}
+builder.Configuration["AzureAd:ClientSecret"] = clientSecret;
+
+
+
+//Authetication logging into Microsoft and getting to get the JWT
+builder.Configuration["AzureAd:CallbackPath"] = "/signin-oidc";
+builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
+
+builder.Services.Configure<OpenIdConnectOptions>(
+    OpenIdConnectDefaults.AuthenticationScheme,
+    options =>
+    {
+        options.ResponseType = OpenIdConnectResponseType.Code;
+        options.SaveTokens = true;
+        options.GetClaimsFromUserInfoEndpoint = false;
+        options.Scope.Add("api://f9a3d163-e6e5-481b-9ea9-869076084bc7/access_as_user");
+        // Surface login failures as readable text instead of a bare 500.
+        options.Events.OnRemoteFailure = ctx =>
+        {
+            ctx.HandleResponse();
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            ctx.Response.ContentType = "text/plain";
+            return ctx.Response.WriteAsync($"Login failed: {ctx.Failure?.Message}");
+        };
+    });
+
+
+
+builder.Services.AddTokenAcquisition();
+builder.Services.AddInMemoryTokenCaches();
+
+builder.Services.AddAuthentication()
+    .AddMicrosoftIdentityWebApi(
+        jwtBearerOptions =>
+        {
+            jwtBearerOptions.MapInboundClaims = false;
+            jwtBearerOptions.TokenValidationParameters.ValidAudiences = new[] { appIdUri, clientId };
+            jwtBearerOptions.TokenValidationParameters.ClockSkew = TimeSpan.FromMinutes(2);
+        },
+        microsoftIdentityOptions =>
+        {
+            microsoftIdentityOptions.Instance = builder.Configuration["AzureAd:Instance"] ?? "https://login.microsoftonline.com/";
+            microsoftIdentityOptions.TenantId  = builder.Configuration["AzureAd:TenantId"];
+            microsoftIdentityOptions.ClientId  = builder.Configuration["AzureAd:ClientId"];
+        },
+        JwtBearerDefaults.AuthenticationScheme);
+
+var scope = builder.Configuration["AzureAd:Scope"] ?? "access_as_user";
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AccessAsUser", policy =>
+        policy.RequireAssertion(ctx =>
+        {
+            var scopeClaim = ctx.User.FindFirst(c => c.Type == "scp");
+            if (scopeClaim is null) return false;
+
+            return scopeClaim.Value
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Contains(scope, StringComparer.OrdinalIgnoreCase);
+        }));
+});
+
+
+
+builder.Services.AddHttpClient("dapr", client =>
+{
+    client.BaseAddress = new Uri("http://localhost:3500/");
+    client.DefaultRequestHeaders.Add("Dapr-TimeoutInSeconds", "30");
+}); 
+
+var app = builder.Build();
+
+// For the microsoft login ⭐ MUST be first — fixes Scheme/Host from X-Forwarded-* headers
+app.UseForwardedHeaders();
+
+//app.UseMiddleware<GlobalExceptionMiddleware>();
+
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+//Here we check if the token is valid or not
+//put it before the authentication and Authorization
+//blocks bots/scanners before they hit the auth logic
+app.UseMiddleware<TokenValidationMiddleware>();
+
+// ⭐ Authentication + Authorization middleware
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();
