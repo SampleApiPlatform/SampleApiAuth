@@ -79,7 +79,7 @@ var appIdUri = builder.Configuration["AzureAd:Audience"];
 // 1) OIDC = Browser-Login (Redirect, Cookie-Session)
 // ---------------------------------------------------------
 
-var clientSecret = builder.Configuration["AzureAdClientSecret1"];
+var clientSecret = builder.Configuration["AzureAdClientSecret2"];
 
 
 if (string.IsNullOrWhiteSpace(clientSecret))
