@@ -10,13 +10,7 @@ using SampleAuthApi.Options;
 
 
 var builder = WebApplication.CreateBuilder(args);
-   
-var clientId = builder.Configuration["AzureAd:ClientId"];
-var appIdUri = builder.Configuration["AzureAd:Audience"];
-var scope = builder.Configuration["AzureAd:Scope"] ?? "access_as_user";
-var clientSecret = builder.Configuration["AzureAdClientSecret2"];
-var keyVaultUri = builder.Configuration["keyvaulturi"];
-var authclient_scope = builder.Configuration["AuthClient:Scope"] ?? "api://e4c2b81e-f125-45c4-ba3b-54380d2b83b7/access_as_user";
+
 
 //This is for the redirect microsoft login
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -32,7 +26,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // 1KeyVaultUri loaded from the Container App Secret
 // ---------------------------------------------------------
                                          
-
+var keyVaultUri = builder.Configuration["keyvaulturi"];
 
 if (string.IsNullOrWhiteSpace(keyVaultUri))
 {
@@ -77,13 +71,15 @@ builder.Services.AddSingleton<TokenValidationMiddleware>();
 
 // Authorization
 builder.Services.AddControllersWithViews();
- 
+    
+var clientId = builder.Configuration["AzureAd:ClientId"];
+var appIdUri = builder.Configuration["AzureAd:Audience"];
 
 // ---------------------------------------------------------
 // 1) OIDC = Browser-Login (Redirect, Cookie-Session)
 // ---------------------------------------------------------
 
-
+var clientSecret = builder.Configuration["AzureAdClientSecret2"];
 
 
 if (string.IsNullOrWhiteSpace(clientSecret))
@@ -106,9 +102,7 @@ builder.Services.Configure<OpenIdConnectOptions>(
         options.ResponseType = OpenIdConnectResponseType.Code;
         options.SaveTokens = true;
         options.GetClaimsFromUserInfoEndpoint = false;
-        options.Scope.Add(authclient_scope);
-        //options.Scope.Add($"{appIdUri}/{scope}");
-        //options.Scope.Add("api://e4c2b81e-f125-45c4-ba3b-54380d2b83b7/access_as_user");
+        options.Scope.Add("api://e4c2b81e-f125-45c4-ba3b-54380d2b83b7/access_as_user");
         // Surface login failures as readable text instead of a bare 500.
         options.Events.OnRemoteFailure = ctx =>
         {
@@ -140,7 +134,7 @@ builder.Services.AddAuthentication()
         },
         JwtBearerDefaults.AuthenticationScheme);
 
-//var scope = builder.Configuration["AzureAd:Scope"] ?? "access_as_user";
+var scope = builder.Configuration["AzureAd:Scope"] ?? "access_as_user";
 
 builder.Services.AddAuthorization(options =>
 {
