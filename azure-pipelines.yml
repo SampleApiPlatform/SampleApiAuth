@@ -92,6 +92,6 @@ steps:
     scriptLocation: inlineScript
     inlineScript: |
       az containerapp update \
-        --name SampleAuthApi \
+        --name sampleauthapi \
         --resource-group sampleApiPlatform_rg \
         --image docker.io/$(DOCKERHUB_USERNAME)/sampleauthapi:latest
