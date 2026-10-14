@@ -16,6 +16,7 @@ var appIdUri = builder.Configuration["AzureAd:Audience"];
 var scope = builder.Configuration["AzureAd:Scope"] ?? "access_as_user";
 var clientSecret = builder.Configuration["AzureAdClientSecret2"];
 var keyVaultUri = builder.Configuration["keyvaulturi"];
+var authclient_scope = builder.Configuration["AuthClient:Scope"] ?? "api://e4c2b81e-f125-45c4-ba3b-54380d2b83b7/access_as_user";
 
 //This is for the redirect microsoft login
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -105,7 +106,8 @@ builder.Services.Configure<OpenIdConnectOptions>(
         options.ResponseType = OpenIdConnectResponseType.Code;
         options.SaveTokens = true;
         options.GetClaimsFromUserInfoEndpoint = false;
-        options.Scope.Add($"{appIdUri}/{scope}");
+        options.Scope.Add(authclient_scope);
+        //options.Scope.Add($"{appIdUri}/{scope}");
         //options.Scope.Add("api://e4c2b81e-f125-45c4-ba3b-54380d2b83b7/access_as_user");
         // Surface login failures as readable text instead of a bare 500.
         options.Events.OnRemoteFailure = ctx =>
