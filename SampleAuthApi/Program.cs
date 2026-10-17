@@ -141,8 +141,8 @@ builder.Configuration["AzureAd:ClientSecret"] = clientSecret;
 //Authetication logging into Microsoft and getting to get the JWT
 //builder.Configuration["AzureAd:CallbackPath"] = "/signin-oidc";
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-    //.AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
+    //.AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
 
 builder.Services.Configure<OpenIdConnectOptions>(
     OpenIdConnectDefaults.AuthenticationScheme,
@@ -214,6 +214,7 @@ builder.Services.AddHttpClient("dapr", client =>
 }); 
 
 var app = builder.Build();
+
 
 //Hot Reload aktivieren (Änderungen ohne Neustart)
 app.UseAzureAppConfiguration();
