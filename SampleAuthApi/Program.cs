@@ -93,47 +93,47 @@ builder.Services.AddSingleton<TokenValidationMiddleware>();
 // Authorization
 builder.Services.AddControllersWithViews();
     
-var clientId = builder.Configuration["AzureAd:ClientId"];
-if (string.IsNullOrWhiteSpace(clientId))
-{
-    throw new InvalidOperationException("AzureAd:ClientId does not have a value.");
-}
-var instance = builder.Configuration["AzureAd:Instance"];
-if (string.IsNullOrWhiteSpace(instance))
-{
-    throw new InvalidOperationException("AzureAd:Instance does not have a value.");
-}
-var tenantId  = builder.Configuration["AzureAd:TenantId"];
-if (string.IsNullOrWhiteSpace(tenantId))
-{
-    throw new InvalidOperationException("AzureAd:TenantId does not have a value.");
-}
+var clientId = builder.Configuration["AzureAd:ClientId"] ?? "";
+//if (string.IsNullOrWhiteSpace(clientId))
+//{
+//    throw new InvalidOperationException("AzureAd:ClientId does not have a value.");
+//}
+var instance = builder.Configuration["AzureAd:Instance"] ?? "";
+//if (string.IsNullOrWhiteSpace(instance))
+//{
+//    throw new InvalidOperationException("AzureAd:Instance does not have a value.");
+//}
+var tenantId  = builder.Configuration["AzureAd:TenantId"] ?? "";
+//if (string.IsNullOrWhiteSpace(tenantId))
+//{
+//    throw new InvalidOperationException("AzureAd:TenantId does not have a value.");
+//}
 //var appIdUri = builder.Configuration["AzureAd:Audience"];
-var audience = builder.Configuration["AzureAd:Audience"];
-if (string.IsNullOrWhiteSpace(audience))
-{
-    throw new InvalidOperationException("AzureAd:Audience does not have a value.");
-}
-var apiscope = builder.Configuration["AzureAd:ApiScope"];
-if (string.IsNullOrWhiteSpace(apiscope))
-{
-    throw new InvalidOperationException("AzureAd:ApiScope does not have a value.");
-}
-var scope = builder.Configuration["AzureAd:Scope"];
-if (string.IsNullOrWhiteSpace(apiscope))
-{
-    throw new InvalidOperationException("AzureAd:Scope does not have a value.");
-}
+var audience = builder.Configuration["AzureAd:Audience"] ?? "";
+//if (string.IsNullOrWhiteSpace(audience))
+//{
+//    throw new InvalidOperationException("AzureAd:Audience does not have a value.");
+//}
+var apiscope = builder.Configuration["AzureAd:ApiScope"] ?? "";
+//if (string.IsNullOrWhiteSpace(apiscope))
+//{
+//    throw new InvalidOperationException("AzureAd:ApiScope does not have a value.");
+//}
+var scope = builder.Configuration["AzureAd:Scope"] ?? "";
+//if (string.IsNullOrWhiteSpace(apiscope))
+//{
+//    throw new InvalidOperationException("AzureAd:Scope does not have a value.");
+//}
 
 // ---------------------------------------------------------
 // 1) OIDC = Browser-Login (Redirect, Cookie-Session)
 // ---------------------------------------------------------
 
-var clientSecret = builder.Configuration["AzureAdClientSecret2"];
-if (string.IsNullOrWhiteSpace(clientSecret))
-{
-    throw new InvalidOperationException("AzureAdClientSecret2 not found in Key Vault.");
-}
+var clientSecret = builder.Configuration["AzureAdClientSecret2"] ?? "";
+//if (string.IsNullOrWhiteSpace(clientSecret))
+//{
+//    throw new InvalidOperationException("AzureAdClientSecret2 not found in Key Vault.");
+//}
 builder.Configuration["AzureAd:ClientSecret"] = clientSecret;
 
 
@@ -214,7 +214,38 @@ builder.Services.AddHttpClient("dapr", client =>
 }); 
 
 var app = builder.Build();
+/// Before builder.Build logs are not available so if there is a variable that is wrong we will throw the exception here and will be logged
 
+if (string.IsNullOrWhiteSpace(clientId))
+{
+    throw new InvalidOperationException("AzureAd:ClientId does not have a value.");
+}
+if (string.IsNullOrWhiteSpace(instance))
+{
+    throw new InvalidOperationException("AzureAd:Instance does not have a value.");
+}
+if (string.IsNullOrWhiteSpace(tenantId))
+{
+    throw new InvalidOperationException("AzureAd:TenantId does not have a value.");
+}
+if (string.IsNullOrWhiteSpace(audience))
+{
+    throw new InvalidOperationException("AzureAd:Audience does not have a value.");
+}
+if (string.IsNullOrWhiteSpace(apiscope))
+{
+    throw new InvalidOperationException("AzureAd:ApiScope does not have a value.");
+}
+if (string.IsNullOrWhiteSpace(apiscope))
+{
+    throw new InvalidOperationException("AzureAd:Scope does not have a value.");
+}
+if (string.IsNullOrWhiteSpace(clientSecret))
+{
+    throw new InvalidOperationException("AzureAdClientSecret2 not found in Key Vault.");
+}
+
+///
 
 //Hot Reload aktivieren (Änderungen ohne Neustart)
 app.UseAzureAppConfiguration();
