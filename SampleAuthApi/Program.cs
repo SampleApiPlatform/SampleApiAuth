@@ -7,9 +7,32 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using SampleAuthApi.Extensions;
 using SampleAuthApi.Options;
+using Microsoft.Extensions.Configuration.AzureAppConfiguration;
+//using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 1. Azure App Configuration connect and load all of the key-value pairs
+builder.Configuration.AddAzureAppConfiguration(options =>
+{
+    // Endpoint aus Environment Variable (Managed Identity)
+    var endpoint = Environment.GetEnvironmentVariable("AZURE_APPCONFIGURATION_ENDPOINT");
+    if(string.IsNullOrWhiteSpace(endpoint))
+    {
+        throw new InvalidOperationException("AZURE_APPCONFIGURATION_ENDPOINT is missing.");
+    }
+    var uri = new Uri(endpoint).ToString();
+
+    options.Connect(uri)
+           // Alle Keys laden
+           .Select("*", LabelFilter.Null);
+           // Optional: Key Vault Referenzen auflösen (falls Secrets dort sind)
+           //.ConfigureKeyVault(kv => 
+           //{
+           //    kv.SetCredential(new DefaultAzureCredential());
+           //});
+});
 
 
 //This is for the redirect microsoft login
@@ -53,12 +76,10 @@ builder.Services.AddControllers();
 builder.Services.Configure<ServiceTokenOptions>(options =>
 {
     var token1 = builder.Configuration["sampleapiplatform-token-client1"];
-
     if (string.IsNullOrWhiteSpace(token1))
     {
         throw new InvalidOperationException("Token 'sampleapiplatform-token-client1' is missing from Key Vault.");
     }
-
     options.ValidTokens.Add(token1);
 });
 
@@ -73,27 +94,55 @@ builder.Services.AddSingleton<TokenValidationMiddleware>();
 builder.Services.AddControllersWithViews();
     
 var clientId = builder.Configuration["AzureAd:ClientId"];
-var appIdUri = builder.Configuration["AzureAd:Audience"];
+if (string.IsNullOrWhiteSpace(clientId))
+{
+    throw new InvalidOperationException("AzureAd:ClientId does not have a value.");
+}
+var instance = builder.Configuration["AzureAd:Instance"];
+if (string.IsNullOrWhiteSpace(instance))
+{
+    throw new InvalidOperationException("AzureAd:Instance does not have a value.");
+}
+var tenantId  = builder.Configuration["AzureAd:TenantId"];
+if (string.IsNullOrWhiteSpace(tenantId))
+{
+    throw new InvalidOperationException("AzureAd:TenantId does not have a value.");
+}
+//var appIdUri = builder.Configuration["AzureAd:Audience"];
+var audience = builder.Configuration["AzureAd:Audience"];
+if (string.IsNullOrWhiteSpace(audience))
+{
+    throw new InvalidOperationException("AzureAd:Audience does not have a value.");
+}
+var apiscope = builder.Configuration["AzureAd:ApiScope"];
+if (string.IsNullOrWhiteSpace(apiscope))
+{
+    throw new InvalidOperationException("AzureAd:ApiScope does not have a value.");
+}
+var scope = builder.Configuration["AzureAd:Scope"];
+if (string.IsNullOrWhiteSpace(apiscope))
+{
+    throw new InvalidOperationException("AzureAd:Scope does not have a value.");
+}
 
 // ---------------------------------------------------------
 // 1) OIDC = Browser-Login (Redirect, Cookie-Session)
 // ---------------------------------------------------------
 
 var clientSecret = builder.Configuration["AzureAdClientSecret2"];
-
-
 if (string.IsNullOrWhiteSpace(clientSecret))
 {
-    throw new InvalidOperationException("ClientSecret not found in Key Vault.");
+    throw new InvalidOperationException("AzureAdClientSecret2 not found in Key Vault.");
 }
 builder.Configuration["AzureAd:ClientSecret"] = clientSecret;
 
 
 
 //Authetication logging into Microsoft and getting to get the JWT
-builder.Configuration["AzureAd:CallbackPath"] = "/signin-oidc";
+//builder.Configuration["AzureAd:CallbackPath"] = "/signin-oidc";
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
+    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+    //.AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
 
 builder.Services.Configure<OpenIdConnectOptions>(
     OpenIdConnectDefaults.AuthenticationScheme,
@@ -102,7 +151,8 @@ builder.Services.Configure<OpenIdConnectOptions>(
         options.ResponseType = OpenIdConnectResponseType.Code;
         options.SaveTokens = true;
         options.GetClaimsFromUserInfoEndpoint = false;
-        options.Scope.Add("api://e4c2b81e-f125-45c4-ba3b-54380d2b83b7/access_as_user");
+        //options.Scope.Add("api://e4c2b81e-f125-45c4-ba3b-54380d2b83b7/access_as_user");
+        options.Scope.Add(apiscope);
         // Surface login failures as readable text instead of a bare 500.
         options.Events.OnRemoteFailure = ctx =>
         {
@@ -123,18 +173,23 @@ builder.Services.AddAuthentication()
         jwtBearerOptions =>
         {
             jwtBearerOptions.MapInboundClaims = false;
-            jwtBearerOptions.TokenValidationParameters.ValidAudiences = new[] { appIdUri, clientId };
+            jwtBearerOptions.TokenValidationParameters.ValidAudiences = new[] { audience, clientId };
             jwtBearerOptions.TokenValidationParameters.ClockSkew = TimeSpan.FromMinutes(2);
         },
         microsoftIdentityOptions =>
         {
-            microsoftIdentityOptions.Instance = builder.Configuration["AzureAd:Instance"] ?? "https://login.microsoftonline.com/";
-            microsoftIdentityOptions.TenantId  = builder.Configuration["AzureAd:TenantId"];
-            microsoftIdentityOptions.ClientId  = builder.Configuration["AzureAd:ClientId"];
+            //microsoftIdentityOptions.Instance = builder.Configuration["AzureAd:Instance"] ?? "https://login.microsoftonline.com/";
+            //microsoftIdentityOptions.TenantId  = builder.Configuration["AzureAd:TenantId"];
+            //microsoftIdentityOptions.ClientId  = builder.Configuration["AzureAd:ClientId"];
+
+            microsoftIdentityOptions.Instance = instance;
+            microsoftIdentityOptions.TenantId  = tenantId;
+            microsoftIdentityOptions.ClientId  = clientId;
         },
         JwtBearerDefaults.AuthenticationScheme);
 
-var scope = builder.Configuration["AzureAd:Scope"] ?? "access_as_user";
+//var scope = builder.Configuration["AzureAd:Scope"] ?? "access_as_user";
+
 
 builder.Services.AddAuthorization(options =>
 {
@@ -159,6 +214,9 @@ builder.Services.AddHttpClient("dapr", client =>
 }); 
 
 var app = builder.Build();
+
+//Hot Reload aktivieren (Änderungen ohne Neustart)
+app.UseAzureAppConfiguration();
 
 // For the microsoft login ⭐ MUST be first — fixes Scheme/Host from X-Forwarded-* headers
 app.UseForwardedHeaders();
